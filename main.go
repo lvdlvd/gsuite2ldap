@@ -42,7 +42,8 @@ func main() {
 	s.BindFunc("", &handler)
 	s.SearchFunc("", &handler)
 
-	// start the server
+	// TODO this doesn't seem to be the proper way to do ldap over TLS/SSL
+	// iirc, there's an EXTENDED request to switch a current conn to SSL but no idea really
 	if *keyFile != "" {
 		log.Printf("Starting LDAP TLS server on %s", *port)
 		log.Printf("keyfile : %s", *keyFile)
@@ -60,7 +61,7 @@ type ldapHandler struct {
 	users map[int]string
 }
 
-// todo: reload if we are queried and have zero results and its been more than 1 minute since we reloaded
+// TODO: reload if we are queried and have zero results and its been more than 1 minute since we reloaded
 func (h *ldapHandler) reload() {
 	uu, err := listUsers(h.svr)
 	if err != nil {
@@ -80,7 +81,7 @@ func (h *ldapHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (ldap.LDA
 	return ldap.LDAPResultInvalidCredentials, nil
 }
 
-// todo: parse and apply filter here and if no matches, trigger search (if older than 1 minute)
+// TODO: parse and apply filter here and if no matches, trigger reload (if older than 1 minute)
 func (h *ldapHandler) Search(boundDN string, searchReq ldap.SearchRequest, conn net.Conn) (ldap.ServerSearchResult, error) {
 
 	objcls, err := ldap.GetFilterObjectClass(searchReq.Filter)
