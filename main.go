@@ -1,47 +1,86 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
+	"net"
 
-	ldap "github.com/vjeantet/ldapserver"
+	"github.com/nmcclain/ldap"
+)
+
+var (
+	port    = flag.String("ldap", "localhost:10389", "Port to serve ldap on.")
+	uidBase = flag.Int("uidbase", 2000, "add this to the gsuite employee numbers to create UID/GID number")
 )
 
 func main() {
+	flag.Parse()
 
-	server := ldap.NewServer()
+	s := ldap.NewServer()
+	s.EnforceLDAP = true
 
-	routes := ldap.NewRouteMux()
-	routes.Bind(handleBind)
-	routes.Extended(handleStartTLS).RequestName(ldap.NoticeOfStartTLS).Label("StartTLS")
-	routes.Search(handleSearch).Label("Search")
+	srv := getClient()
+	uu, err := listUsers(srv)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-	server.Handle(routes)
+	// register Bind and Search function handlers
+	handler := ldapHandler{uu}
 
-	log.Fatalln(server.ListenAndServe("127.0.0.1:10389"))
+	s.BindFunc("", &handler)
+	s.SearchFunc("", &handler)
+
+	// start the server
+	log.Printf("Starting LDAP server on %s", *port)
+	log.Fatalln(s.ListenAndServe(*port))
 }
 
-func handleBind(w ldap.ResponseWriter, m *ldap.Message) {
-	res := ldap.NewBindResponse(ldap.LDAPResultSuccess)
-	w.Write(res)
+type ldapHandler struct {
+	users map[int]string
 }
 
-func handleSearch(w ldap.ResponseWriter, m *ldap.Message) {
-	r := m.GetSearchRequest()
-	log.Printf("Request BaseDn=%s", r.BaseObject())
-	log.Printf("Request Filter=%s", r.Filter())
-	log.Printf("Request FilterString=%s", r.FilterString())
-	log.Printf("Request Attributes=%s", r.Attributes())
+func (h *ldapHandler) Bind(bindDN, bindSimplePw string, conn net.Conn) (ldap.LDAPResultCode, error) {
+	if bindDN == "" && bindSimplePw == "" {
+		return ldap.LDAPResultSuccess, nil
+	}
+	return ldap.LDAPResultInvalidCredentials, nil
+}
 
-	e := ldap.NewSearchResultEntry("cn=lvd, " + r.BaseObject())
-	e.AddAttribute("cn", "lvd")
-	e.AddAttribute("uid", "lvd")
-	e.AddAttribute("uidNumber", "1000")
-	e.AddAttribute("gidNumber", "1000")
-	e.AddAttribute("homeDirectory", "/home/lvd")
-	e.AddAttribute("objectClass", "posixAccount")
-	w.Write(e)
+func (h *ldapHandler) Search(boundDN string, searchReq ldap.SearchRequest, conn net.Conn) (ldap.ServerSearchResult, error) {
 
-	res := ldap.NewSearchResultDoneResponse(ldap.LDAPResultSuccess)
-	w.Write(res)
+	objcls, err := ldap.GetFilterObjectClass(searchReq.Filter)
+	if err != nil {
+		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInvalidDNSyntax}, err
+	}
+	// restore capitalisation
+	switch objcls {
+	case "posixaccount":
+		objcls = "posixAccount"
+	case "shadowaccount":
+		objcls = "shadowAccount"
+	case "posixgroup":
+		objcls = "posixGroup"
+	default:
+		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultNoSuchObject}, nil
+	}
 
+	entries := []*ldap.Entry{}
+
+	for uid, name := range h.users {
+		e := &ldap.Entry{DN:fmt.Sprintf("cn=%s,%s", name, searchReq.BaseDN)}
+
+		[]*ldap.EntryAttribute{
+			&ldap.EntryAttribute{"cn", []string{name}},
+			&ldap.EntryAttribute{"uid", []string{name}},
+			&ldap.EntryAttribute{"uidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
+			&ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
+			&ldap.EntryAttribute{"homeDirectory", []string{fmt.Sprintf("/home/%s", name)}},
+			&ldap.EntryAttribute{"objectClass", []string{"top", objcls}},
+		}}
+		entries = append(entries, e)
+	}
+
+	return ldap.ServerSearchResult{entries, []string{}, []ldap.Control{}, ldap.LDAPResultSuccess}, nil
 }

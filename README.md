@@ -3,7 +3,7 @@ serve gsuite user directory as rfc2307 compliant posixAccount, shadowAccount and
 
 According to RFC2307, the libc password, shadow and group functions should map to the following ldap queries:
 
-		getpwnam()              (&(objectClass=posixAccount)(uid=%s))
+		    getpwnam()              (&(objectClass=posixAccount)(uid=%s))
         getpwuid()              (&(objectClass=posixAccount)(uidNumber=%d))
         getpwent()              (objectClass=posixAccount)
 
