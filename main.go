@@ -54,32 +54,42 @@ func (h *ldapHandler) Search(boundDN string, searchReq ldap.SearchRequest, conn 
 	if err != nil {
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInvalidDNSyntax}, err
 	}
-	// restore capitalisation
-	switch objcls {
-	case "posixaccount":
-		objcls = "posixAccount"
-	case "shadowaccount":
-		objcls = "shadowAccount"
-	case "posixgroup":
-		objcls = "posixGroup"
-	default:
-		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultNoSuchObject}, nil
-	}
 
 	entries := []*ldap.Entry{}
 
-	for uid, name := range h.users {
-		e := &ldap.Entry{DN:fmt.Sprintf("cn=%s,%s", name, searchReq.BaseDN)}
+	// restore capitalisation
+	switch objcls {
+	case "posixaccount":
+		for uid, name := range h.users {
+			entries = append(entries, &ldap.Entry{DN: fmt.Sprintf("cn=%s,%s", name, searchReq.BaseDN), Attributes: []*ldap.EntryAttribute{
+				&ldap.EntryAttribute{"cn", []string{name}},
+				&ldap.EntryAttribute{"uid", []string{name}},
+				&ldap.EntryAttribute{"uidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
+				&ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
+				&ldap.EntryAttribute{"homeDirectory", []string{fmt.Sprintf("/home/%s", name)}},
+				&ldap.EntryAttribute{"objectClass", []string{"top", "posixAccount"}},
+			}})
+		}
 
-		[]*ldap.EntryAttribute{
-			&ldap.EntryAttribute{"cn", []string{name}},
-			&ldap.EntryAttribute{"uid", []string{name}},
-			&ldap.EntryAttribute{"uidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
-			&ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
-			&ldap.EntryAttribute{"homeDirectory", []string{fmt.Sprintf("/home/%s", name)}},
-			&ldap.EntryAttribute{"objectClass", []string{"top", objcls}},
-		}}
-		entries = append(entries, e)
+	case "shadowaccount":
+		for uid, name := range h.users {
+			entries = append(entries, &ldap.Entry{DN: fmt.Sprintf("cn=%s,%s", name, searchReq.BaseDN), Attributes: []*ldap.EntryAttribute{
+				&ldap.EntryAttribute{"uid", []string{name}},
+				&ldap.EntryAttribute{"objectClass", []string{"top", "shadowAccount"}},
+			}})
+		}
+
+	case "posixgroup":
+		for uid, name := range h.users {
+			entries = append(entries, &ldap.Entry{DN: fmt.Sprintf("cn=%s,%s", name, searchReq.BaseDN), Attributes: []*ldap.EntryAttribute{
+				&ldap.EntryAttribute{"cn", []string{name}},
+				&ldap.EntryAttribute{"gidNumber", []string{fmt.Sprintf("%d", *uidBase+uid)}},
+				&ldap.EntryAttribute{"objectClass", []string{"top", "posixGroup"}},
+			}})
+		}
+
+	default:
+		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultNoSuchObject}, nil
 	}
 
 	return ldap.ServerSearchResult{entries, []string{}, []ldap.Control{}, ldap.LDAPResultSuccess}, nil

@@ -18,8 +18,8 @@ According to RFC2307, the libc password, shadow and group functions should map t
 The schemata for posixAccount, shadowAccount and posixGroup are: 
 
 	posixAccount:  MUST ( cn $ uid $ uidNumber $ gidNumber $ homeDirectory )
-	shadowAccount: MUST uid
-	posixGroup:    MUST ( cn $ gidNumber )
+	shadowAccount: MUST        uid
+	posixGroup:    MUST ( cn $                   gidNumber )
 
 	
 all derive from top, which mandates objectClass as an attributed
