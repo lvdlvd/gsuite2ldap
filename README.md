@@ -49,3 +49,8 @@ We only serve user->uidnumber/gidnumber as derived from the gsuite user director
 
 for all 3 query types.
 
+KNOWN BUG: the TLS mechanism doesn't seem to work.  Testing with ldapsearch -ZZ, the server complains about the connection not looking like a handshake.  iirc, ldap has an in-protocol mechanism to switch to TLS on a current connection, but i don't have the time to research and implement that.
+
+
+
+
