@@ -18,41 +18,7 @@ import (
 	"google.golang.org/api/admin/directory/v1"
 )
 
-type userInfo struct {
-	Name string
-	Uid  int
-}
-
-func main() {
-	// client, err := google.DefaultClient(context.Background(), admin.AdminDirectoryUserReadonlyScope)
-	// if err != nil {
-	// 	log.Fatal("failed to create client")
-	// }
-	// srv, err := admin.New(client)
-	// if err != nil {
-	// 	log.Fatal("failed to create service")
-	// }
-
-	srv := getClient()
-	uu, err := listUsers(srv)
-	log.Println(err)
-	for _, v := range uu {
-		log.Println(v)
-	}
-
-	u2n := map[int][]string{}
-	for _, v := range uu {
-		u2n[v.Uid] = append(u2n[v.Uid], v.Name)
-	}
-	for k, v := range u2n {
-		if len(v) > 1 {
-			log.Printf("UID %d maps to multiple users: %v", k, v)
-		}
-	}
-
-}
-
-func listUsers(srv *admin.Service) ([]userInfo, error) {
+func listUsers(srv *admin.Service) (map[int]string, error) {
 
 	req := srv.Users.List()
 	req = req.Customer("my_customer")
@@ -63,7 +29,8 @@ func listUsers(srv *admin.Service) ([]userInfo, error) {
 		return nil, err
 	}
 
-	var uu []userInfo
+	uu := map[int]string{}
+
 users:
 	for _, u := range r.Users {
 		//fmt.Printf("%#v\n", u)
@@ -82,12 +49,23 @@ users:
 			if s, _ := m["type"].(string); s != "organization" {
 				continue
 			}
-			s, _ := m["value"].(string)
+			s, ok := m["value"].(string)
 			n, err := strconv.ParseInt(s, 10, 32)
-			if err != nil {
+			if err != nil || !ok {
+				log.Printf("Invalid uid for %q: %q (%v)", u.PrimaryEmail, s, err)
 				continue
 			}
-			uu = append(uu, userInfo{Name: strings.Split(u.PrimaryEmail, "@")[0], Uid: int(n)})
+			uname := strings.Split(u.PrimaryEmail, "@")[0]
+			if on, ok := uu[int(n)]; ok {
+				if on != "" {
+					log.Printf("UID %d mapped to multiple users: %q", on)
+					uu[int(n)] = ""
+				}
+				log.Printf("UID %d mapped to multiple users: %q", uname)
+			} else {
+				uu[int(n)] = uname
+			}
+
 			continue users
 		}
 
@@ -184,3 +162,16 @@ func getClient() *admin.Service {
 	}
 	return srv
 }
+
+// // cant get this to work on gcompute; dont know how to get the rights set.
+// func getClient() *admin.Service {
+// 	client, err := google.DefaultClient(context.Background(), admin.AdminDirectoryUserReadonlyScope)
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 	}
+// 	srv, err := admin.New(client)
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 	}
+// 	return srv
+// }
