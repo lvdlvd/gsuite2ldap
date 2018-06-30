@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -15,18 +14,12 @@ import (
 )
 
 var (
-	port     = flag.String("ldap", "localhost:10389", "Port to serve ldap on.")
-	uidBase  = flag.Int("uidbase", 2000, "add this to the gsuite employee numbers to create UID/GID number")
-	certFile = flag.String("cert", "", "path to certfile")
-	keyFile  = flag.String("key", "", "path to private key file.  if not absolute, relative to certfile's directory")
+	port    = flag.String("ldap", "localhost:10389", "Port to serve ldap on.")
+	uidBase = flag.Int("uidbase", 2000, "add this to the gsuite employee numbers to create UID/GID number")
 )
 
 func main() {
 	flag.Parse()
-
-	if *keyFile != "" && filepath.Dir(*keyFile) == "." {
-		*keyFile = filepath.Join(filepath.Dir(*certFile), filepath.Base(*keyFile))
-	}
 
 	s := ldap.NewServer()
 	s.EnforceLDAP = true
@@ -41,15 +34,6 @@ func main() {
 
 	s.BindFunc("", &handler)
 	s.SearchFunc("", &handler)
-
-	// TODO this doesn't seem to be the proper way to do ldap over TLS/SSL
-	// iirc, there's an EXTENDED request to switch a current conn to SSL but no idea really
-	if *keyFile != "" {
-		log.Printf("Starting LDAP TLS server on %s", *port)
-		log.Printf("keyfile : %s", *keyFile)
-		log.Printf("certfile: %s", *certFile)
-		log.Fatalln(s.ListenAndServeTLS(*port, *certFile, *keyFile))
-	}
 
 	log.Printf("Starting LDAP server on %s", *port)
 	log.Fatalln(s.ListenAndServe(*port))
